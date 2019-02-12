@@ -111,6 +111,8 @@ def main(args):
                 if img.ndim == 2:
                     img = to_rgb(img)
                 img = img[:,:,0:3]
+                fimage.image_path = fimage.image_path.replace('\\', '/')
+                #print(fimage)
                 _paths = fimage.image_path.split('/')
                 a,b = _paths[-2], _paths[-1]
                 target_dir = os.path.join(args.output_dir, a)

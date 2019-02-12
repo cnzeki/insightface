@@ -10,6 +10,7 @@ import logging
 import pickle
 import numpy as np
 from image_iter import FaceImageIter
+from image_list_iter import FaceImageDirIter
 from image_iter import FaceImageIterList
 import mxnet as mx
 from mxnet import ndarray as nd
@@ -33,7 +34,7 @@ import verification
 import sklearn
 #sys.path.append(os.path.join(os.path.dirname(__file__), 'losses'))
 #import center_loss
-
+from dataset_dir import FileDirReader
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -128,6 +129,7 @@ def parse_args():
   parser.add_argument('--color', type=int, default=0, help='color jittering aug')
   parser.add_argument('--images-filter', type=int, default=0, help='minimum images per identity filter')
   parser.add_argument('--target', type=str, default='lfw,cfp_fp,agedb_30', help='verification targets')
+  parser.add_argument('--target-dir', type=str, default='', help='verification target dir')
   parser.add_argument('--ce-loss', default=False, action='store_true', help='if output ce loss')
   args = parser.parse_args()
   return args
@@ -362,6 +364,22 @@ def get_symbol(args, arg_params, aux_params):
   out = mx.symbol.Group(out_list)
   return (out, arg_params, aux_params)
 
+def extract_outputs(model):
+    _sym = model.symbol
+    output_names = _sym.list_outputs()
+    output_blobs = model.get_outputs()
+    for name, blob in zip(output_names, output_blobs):
+        print('name:{} blob:{}'.format(name, blob))
+
+
+def makedirs(path):
+    dir, fname = os.path.split(path)
+    if not os.path.exists(dir):
+        try:
+            os.makedirs(dir)
+        except:
+            pass
+
 def train_net(args):
     ctx = []
     cvd = os.environ['CUDA_VISIBLE_DEVICES'].strip()
@@ -393,8 +411,22 @@ def train_net(args):
     data_dir = data_dir_list[0]
     path_imgrec = None
     path_imglist = None
-    prop = face_image.load_property(data_dir)
-    args.num_classes = prop.num_classes
+
+    path_imgrec = os.path.join(data_dir, "train.rec")
+    if os.path.exists(path_imgrec):
+        prop = face_image.load_property(data_dir)
+        args.num_classes = prop.num_classes
+        image_iter = FaceImageIter
+    else:
+        reader = FileDirReader(data_dir)
+        path_imgrec = reader
+        args.num_classes = reader.numOfClass()
+        image_iter = FaceImageDirIter
+        
+    target_dir = data_dir
+    if args.target_dir:
+        target_dir = args.target_dir
+    
     #image_size = prop.image_size
     image_size = [int(x) for x in args.image_size.split(',')]
     assert len(image_size)==2
@@ -404,8 +436,7 @@ def train_net(args):
     print('image_size', image_size)
     assert(args.num_classes>0)
     print('num_classes', args.num_classes)
-    path_imgrec = os.path.join(data_dir, "train.rec")
-
+    
     if args.loss_type==1 and args.num_classes>20000:
       args.beta_freeze = 5000
       args.gamma = 0.06
@@ -439,7 +470,7 @@ def train_net(args):
     )
     val_dataiter = None
 
-    train_dataiter = FaceImageIter(
+    train_dataiter = image_iter(
         batch_size           = args.batch_size,
         data_shape           = data_shape,
         path_imgrec          = path_imgrec,
@@ -472,7 +503,7 @@ def train_net(args):
     ver_list = []
     ver_name_list = []
     for name in args.target.split(','):
-      path = os.path.join(data_dir,name+".bin")
+      path = os.path.join(target_dir, name+".bin")
       if os.path.exists(path):
         data_set = verification.load_bin(path, image_size)
         ver_list.append(data_set)
@@ -490,7 +521,6 @@ def train_net(args):
         print('[%s][%d]Accuracy-Flip: %1.5f+-%1.5f' % (ver_name_list[i], nbatch, acc2, std2))
         results.append(acc2)
       return results
-
 
 
     highest_acc = [0.0, 0.0]  #lfw and target
@@ -519,6 +549,7 @@ def train_net(args):
           break
 
       _cb(param)
+      #extract_outputs(model)
       if mbatch%1000==0:
         print('lr-batch-epoch:',opt.lr,param.nbatch,param.epoch)
 
@@ -557,6 +588,7 @@ def train_net(args):
         if do_save:
           print('saving', msave)
           arg, aux = model.get_params()
+          makedirs(prefix)
           mx.model.save_checkpoint(prefix, msave, model.symbol, arg, aux)
         print('[%d]Accuracy-Highest: %1.5f'%(mbatch, highest_acc[-1]))
       if mbatch<=args.beta_freeze:
