@@ -15,8 +15,6 @@ from mxnet import ndarray as nd
 import argparse
 import mxnet.optimizer as optimizer
 from config import config, default, generate_config
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'common'))
-import face_image
 sys.path.append(os.path.join(os.path.dirname(__file__), 'eval'))
 import verification
 sys.path.append(os.path.join(os.path.dirname(__file__), 'symbol'))
@@ -24,6 +22,7 @@ import fresnet
 import fmobilefacenet
 import fmobilenet
 import fmnasnet
+import fdensenet
 
 
 logger = logging.getLogger()
@@ -376,7 +375,7 @@ def train_net(args):
         sys.exit(0)
 
     epoch_cb = None
-    #train_dataiter = mx.io.PrefetchingIter(train_dataiter)
+    train_dataiter = mx.io.PrefetchingIter(train_dataiter)
 
     model.fit(train_dataiter,
         begin_epoch        = begin_epoch,
@@ -394,7 +393,6 @@ def train_net(args):
         epoch_end_callback = epoch_cb )
 
 def main():
-    #time.sleep(3600*6.5)
     global args
     args = parse_args()
     train_net(args)
