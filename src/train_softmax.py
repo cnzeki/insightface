@@ -575,7 +575,7 @@ def train_net(args):
                 highest_acc[0] = score
             highest_acc[-1] = acc_list[-1]
             #if lfw_score>=0.99:
-            #  do_save = True
+            #  do_save = True 
         if is_highest:
           do_save = True
         if args.ckpt==0:
@@ -601,7 +601,11 @@ def train_net(args):
       if args.max_steps>0 and mbatch>args.max_steps:
         sys.exit(0)
 
-    epoch_cb = None
+    def _epoch_callback(epoch, symbol, _arg_params, _aux_params):
+        makedirs(prefix)
+        mx.model.save_checkpoint(prefix, epoch, model.symbol, _arg_params, _aux_params)
+
+    epoch_cb = _epoch_callback
     train_dataiter = mx.io.PrefetchingIter(train_dataiter)
 
     model.fit(train_dataiter,
